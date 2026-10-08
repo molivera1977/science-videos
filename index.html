@@ -53,8 +53,10 @@ button{font:inherit; cursor:pointer;}
   color:#fff; display:grid; place-items:center; font-size:19px;}
 .clip .t{flex:1; min-width:0;}
 .clip .t b{display:block; font-size:18px;}
-.clip .t span{display:block; font-size:14px; color:var(--ink-faint);
+.clip .t .m{display:block; font-size:14px; color:var(--ink-faint);
   font-family:"IBM Plex Mono",monospace;}
+.clip .t .say{display:block; font-size:14px; color:var(--sci-dark); font-weight:600;
+  margin-top:4px; font-family:"Public Sans",sans-serif;}
 .when{background:var(--sci-soft); border:1px solid var(--sci-line); color:var(--sci-dark);
   border-radius:999px; padding:4px 11px; font-size:12px; font-weight:600; white-space:nowrap;}
 
@@ -102,13 +104,17 @@ button{font:inherit; cursor:pointer;}
 </div>
 
 <script>
-/* Each clip was opened and checked on 2026-10-07: title, length and channel are
-   what is written here. The footage itself is Mr. O's to preview. */
+/* Watched 2026-10-08 at three points with the player reporting its true
+   position (8.9s, 20.9s, 30.9s). Real footage runs to about 0:31; the last
+   few seconds are a PennLive end card. The clip explains itself in burned-in
+   TEXT, not narration, and that sentence is above this class's reading level
+   — so the note below tells the teacher to read it aloud. */
 const CLIPS = [
   { id: 'gfnaj8ENg4I',
     title: 'Why do curlers sweep the ice?',
-    meta: 'PennLive.com · 0:34',
-    when: 'End of Day 1' }
+    meta: 'PennLive.com · 0:31 of footage',
+    when: 'End of Day 1',
+    say: 'Read the caption aloud at 0:21 — do not make them read it.' }
 ];
 
 const list = document.getElementById('list');
@@ -119,11 +125,13 @@ CLIPS.forEach(c => {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'clip';
   b.innerHTML = '<span class="play">&#9654;</span>' +
-    '<span class="t"><b></b><span></span></span>' +
+    '<span class="t"><b></b><span class="m"></span><span class="say"></span></span>' +
     '<span class="when"></span>';
   b.querySelector('b').textContent = c.title;
-  b.querySelector('.t span').textContent = c.meta;
+  b.querySelector('.m').textContent = c.meta;
   b.querySelector('.when').textContent = c.when;
+  const say = b.querySelector('.say');
+  if (c.say) say.textContent = c.say; else say.remove();
   b.onclick = () => open(c);
   list.appendChild(b);
 });
