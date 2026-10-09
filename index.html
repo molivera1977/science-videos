@@ -64,10 +64,21 @@ button{font:inherit; cursor:pointer;}
 #stage{position:fixed; inset:0; background:#000; display:none; z-index:60;}
 #stage.on{display:block;}
 #stage iframe{position:absolute; inset:0; width:100%; height:100%; border:0;}
-#close{position:absolute; top:14px; right:14px; z-index:61;
+/* YouTube keeps its own buttons on the player: the channel link along the top,
+   and "More videos" / "Watch on YouTube" along the bottom. No URL parameter
+   removes them. These two strips swallow the clicks so neither can be reached;
+   the middle of the picture stays clickable for play and pause. */
+.shield{position:absolute; left:0; right:0; z-index:60;}
+.shield.top{top:0; height:17%;}
+.shield.bottom{bottom:0; height:22%;}
+/* The bottom shield also covers YouTube's own fullscreen button, so the page
+   carries its own. Both sit above the shields. */
+.pbtn{position:absolute; top:14px; z-index:61;
   background:rgba(0,0,0,.65); color:#fff; border:1px solid rgba(255,255,255,.35);
   border-radius:999px; padding:9px 18px; font-size:15px; font-weight:600;}
-#close:hover{background:rgba(0,0,0,.85);}
+.pbtn:hover{background:rgba(0,0,0,.85);}
+#close{right:14px;}
+#full{right:150px;}
 .note{background:var(--surface); border:1px solid var(--line); border-radius:14px;
   padding:14px 16px; font-size:14.5px; color:var(--ink-soft); margin-top:20px;}
 .note b{color:var(--ink);}
@@ -90,17 +101,21 @@ button{font:inherit; cursor:pointer;}
   <div id="list"></div>
 
   <div class="note">
-    <b>One thing the player still does.</b> YouTube puts its own &ldquo;Watch on YouTube&rdquo; button
-    in the corner, and when a clip finishes it may offer more from the same channel. Close the
-    player as soon as the clip ends and neither matters.
+    <b>Nothing on the player can be tapped.</b> YouTube puts its own buttons along the top and
+    bottom of the picture &mdash; a channel link, &ldquo;More videos&rdquo;, &ldquo;Watch on
+    YouTube&rdquo;. Those strips are covered here, so a stray tap cannot leave the clip. Tap the
+    middle to pause or play, <b>Full screen</b> to fill the projector. <b>Close</b> or <b>Esc</b> ends it.
   </div>
 
   <p class="foot">Nothing here is stored or sent. Clips are linked, not copied.</p>
 </div>
 
 <div id="stage">
-  <button id="close" type="button">&#10005;&nbsp; Close</button>
+  <button id="full" class="pbtn" type="button">&#9974;&nbsp; Full screen</button>
+  <button id="close" class="pbtn" type="button">&#10005;&nbsp; Close</button>
   <div id="frame"></div>
+  <div class="shield top" aria-hidden="true"></div>
+  <div class="shield bottom" aria-hidden="true"></div>
 </div>
 
 <script>
@@ -156,6 +171,10 @@ function close() {
   frame.innerHTML = '';          /* stops playback dead */
 }
 document.getElementById('close').onclick = close;
+document.getElementById('full').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (stage.requestFullscreen) stage.requestFullscreen();
+};
 document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
 try { const t = localStorage.getItem('sci_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
