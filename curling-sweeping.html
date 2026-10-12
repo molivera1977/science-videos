@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why do players sweep the ice?</title>
+<meta name="description" content="A drawn clip for Mr. O's science class: the same push two times, without sweeping and with sweeping, and why swept ice is more slippery.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232E7D6B'/%3E%3Cpath d='M13 10l10 6-10 6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;600;700&display=swap">
+<!--
+  A drawn clip for the Starting and Stopping lesson: the same stone, the same
+  push, two tries. A thrower slides out and lets go of the stone at the start
+  line. Try 1 nobody sweeps. Try 2 two sweepers rub the ice IN FRONT of the stone.
+  Then the clip says WHY: rubbing makes heat (rub your hands), the brushes warm the
+  ice a little, and warmer ice is more slippery. It says "warms", never "melts":
+  researchers agree on the warming and still argue about melting. The motion is computed, not filmed:
+      slowing = friction × gravity          distance = speed² ÷ (2 × friction × gravity)
+  The friction numbers are chosen so the stone slides 10 m without sweeping and
+  12 m with sweeping. They are for showing the idea, not measured on real ice.
+  Nothing starts by itself. After Play is pressed, each sentence is read aloud as
+  it appears (Marcos 10/11: "the narration should auto play with the animation"),
+  and the clip waits for a sentence to finish before the next part starts.
+  Voice on / Voice off turns that reading off. No student data, nothing is sent anywhere.
+-->
+<style>
+:root{
+  --ink:#16211F; --ink-soft:#4A5C58; --bg:#F5F8F7; --surface:#FFFFFF; --line:#D6E3DF;
+  --go:#1E63C4; --go-ink:#FFFFFF;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{background:var(--bg); color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+main{max-width:1800px; margin:0 auto; padding:10px 16px 14px;}
+h1{font-family:Fraunces,Georgia,serif; font-size:30px; line-height:1.15; margin:2px 0 8px;}
+#stage{display:block; width:100%; max-width:calc((100vh - 232px) * 1280 / 464); margin:0 auto;
+  aspect-ratio:1280 / 464; border-radius:14px; border:1px solid var(--line); background:#dfeaf2;}
+.cap{display:flex; align-items:center; gap:12px; margin:10px auto 0; max-width:min(1100px + 22vw, 1500px); min-height:66px;}
+#cap{font-size:clamp(25px, 1.8vw, 36px); line-height:1.3; margin:0; font-weight:600;}
+.row{display:flex; gap:12px; justify-content:center; margin-top:10px;}
+button{font:inherit; font-size:21px; font-weight:700; border-radius:12px; border:2px solid var(--go);
+  padding:9px 22px; cursor:pointer; background:var(--surface); color:var(--go);}
+button.main{background:var(--go); color:var(--go-ink);}
+button:focus-visible{outline:3px solid #F2A900; outline-offset:2px;}
+#say{flex:0 0 auto; padding:8px 14px; font-size:22px;}
+</style>
+</head>
+<body>
+<main>
+  <h1>Why do players sweep the ice?</h1>
+  <canvas id="stage" width="1280" height="464" role="img"
+    aria-label="A player slides a curling stone across ice two times with the same push. The first time nobody sweeps and the stone stops before the target. The second time two sweepers rub the ice in front of the stone and the stone slides farther, into the target. Then two hands rub together to show that rubbing makes heat, and the swept ice glows to show the ice is a little warmer."></canvas>
+  <div class="cap">
+    <button id="say" type="button" aria-label="Read the words aloud">🔊</button>
+    <p id="cap" aria-live="polite"></p>
+  </div>
+  <div class="row">
+    <button id="play" class="main" type="button">▶ Play</button>
+    <button id="again" type="button">↻ Start over</button>
+    <button id="voice" type="button" aria-pressed="true">🔊 Voice on</button>
+  </div>
+</main>
+
+<script>
+/* ── THE SHEET (all positions in meters; the picture is drawn from them) ── */
+const W = 1280, H = 464;
+const X0 = 40, SX = 70;            // left edge of the ice · pixels per meter along the ice
+const CY = 262, SZ = 64;           // the stone's path · pixels per meter across the ice
+const FS = 70;                     // pixels per meter for a person's height (same as the ice)
+const HALF_WIDTH = 2.375;          // a curling sheet is 4.75 m wide
+const SHEET_TOP = CY - HALF_WIDTH * SZ, SHEET_BOTTOM = CY + HALF_WIDTH * SZ;
+const START = 2.4;                 // where the thrower lets go of the stone
+const TEE = 14.9;                  // center of the target
+const RINGS = [[1.83, '#1F5FBF'], [1.22, '#F7FBFE'], [0.61, '#D8352A'], [0.15, '#F7FBFE']];
+const STONE_DRAWN_RADIUS = 24 / SX;   // the stone is drawn bigger than life so the class can see it
+
+/* ── THE MOTION ── */
+const G = 9.8;
+const MU_PLAIN = 0.0150;           // friction of ice nobody swept
+const MU_SWEPT = 0.0125;           // friction of swept ice (less)
+const DIST_PLAIN = 10;             // meters the stone slides with no sweeping
+const V0 = Math.sqrt(2 * MU_PLAIN * G * DIST_PLAIN);   // the same push both times
+const PLAYBACK = 1.6;              // the clip runs faster than real life
+const BRUSH_AHEAD = [0.90, 1.75];  // each brush stays this far IN FRONT of the stone's center
+const FEET_AHEAD  = [0.15, 1.00];  // and each sweeper walks beside the path, level with the stone or ahead of it
+const SWEEP_SIDE  = -0.75;         // the sweepers walk on the far side of the path
+const WAIT_SIDE   = -1.5;          // where they stand when they are not sweeping
+
+const RELEASE_SPEED = V0 * PLAYBACK;   // how fast the stone moves on screen when the thrower lets go
+const THROW_TIME = 1.2;               // seconds the thrower slides with the stone before letting go
+const THROW_LENGTH = RELEASE_SPEED * THROW_TIME / 2;
+const HELD_AT = START - THROW_LENGTH; // where the thrower holds the stone before the slide
+const FOLLOW = 1.3;                   // meters the thrower keeps sliding after letting go
+/* The thrower's hand: on the stone until the start line, then the thrower slows down and stops. */
+function handAfterRelease(t) {
+  const a = RELEASE_SPEED * RELEASE_SPEED / (2 * FOLLOW), tt = Math.min(t, RELEASE_SPEED / a);
+  return START + RELEASE_SPEED * tt - 0.5 * a * tt * tt;
+}
+function heldStone(t) {               // speeding up in the thrower's hand, from rest to the release speed
+  const tt = Math.min(t, THROW_TIME), a = RELEASE_SPEED / THROW_TIME;
+  return { x: HELD_AT + 0.5 * a * tt * tt, v: a * tt / PLAYBACK, stopped: false };
+}
+
+function stoneAt(t, mu) {
+  const a = mu * G, tStop = V0 / a, tt = Math.min(t, tStop);
+  return { x: START + V0 * tt - 0.5 * a * tt * tt, v: Math.max(0, V0 - a * tt), stopped: t >= tStop };
+}
+
+/* ── THE STORY ── */
+const CAPTIONS = {
+  idle:  'In the sport of curling, a player slides a stone across ice. Press Play.',
+  intro: 'Try 1. A player slides the stone. Nobody sweeps the ice.',
+  throw1:'Try 1. A player slides the stone. Nobody sweeps the ice.',
+  try1:  'Try 1. A player slides the stone. Nobody sweeps the ice.',
+  rest1: 'The stone stopped before the target. Friction slowed the stone.',
+  fade:  'The stone stopped before the target. Friction slowed the stone.',
+  ready: 'Now two sweepers get ready.',
+  throw2:'Try 2. The same push. Two sweepers rub the ice in front of the stone.',
+  try2:  'Try 2. The same push. Two sweepers rub the ice in front of the stone.',
+  why1:  'Rubbing makes heat. Rub your hands. Your hands get warm.',
+  why2:  'The brushes rub the ice. The ice gets a little warmer. Warmer ice is more slippery.',
+  done:  ''   // written when the numbers are known
+};
+const HOLD = { intro: 0.8, rest1: 3.0, fade: 0.35, ready: 1.8, why1: 3.0, why2: 3.5 };
+
+const HELD = () => ({ x: HELD_AT, v: 0, stopped: false });
+const sim = { phase: 'idle', t: 0, clock: 0, playing: false, stone: HELD(),
+              try1Stop: null, try2Stop: null, sweptTo: null };
+
+function go(phase) {
+  sim.phase = phase; sim.t = 0;
+  if (phase === 'done') {
+    const d1 = Math.round(sim.try1Stop - START), d2 = Math.round(sim.try2Stop - START), more = d2 - d1;
+    CAPTIONS.done = `Warmer ice has less friction. With sweeping, the stone slid ${more} meters farther.`;
+  }
+  setCaption(CAPTIONS[phase]);
+}
+
+function tick(dt) {
+  sim.clock += dt; sim.t += dt;
+  switch (sim.phase) {
+    case 'intro': if (sim.t >= HOLD.intro) go('throw1'); break;
+    case 'throw1': sim.stone = heldStone(sim.t); if (sim.t >= THROW_TIME) go('try1'); break;
+    case 'throw2': sim.stone = heldStone(sim.t); if (sim.t >= THROW_TIME) go('try2'); break;
+    case 'try1':
+      sim.stone = stoneAt(sim.t * PLAYBACK, MU_PLAIN);
+      if (sim.stone.stopped) { sim.try1Stop = sim.stone.x; go('rest1'); }
+      break;
+    case 'rest1': if (sim.t >= HOLD.rest1 && !narrator.busy) go('fade'); break;        // wait for the sentence to end
+    case 'fade':  if (sim.t >= HOLD.fade) { sim.stone = HELD(); go('ready'); } break;
+    case 'ready': if (sim.t >= HOLD.ready && !narrator.busy) go('throw2'); break;
+    case 'try2':
+      sim.stone = stoneAt(sim.t * PLAYBACK, MU_SWEPT);
+      sim.sweptTo = Math.max(sim.sweptTo || 0, sim.stone.x + BRUSH_AHEAD[1]);   // the far brush has rubbed the ice up to here
+      if (sim.stone.stopped) { sim.try2Stop = sim.stone.x; go('why1'); }
+      break;
+    case 'why1': if (sim.t >= HOLD.why1 && !narrator.busy) go('why2'); break;   // rub your hands
+    case 'why2': if (sim.t >= HOLD.why2 && !narrator.busy) go('done'); break;   // the brushes warm the ice
+    case 'done': if (sim.t >= 1.2 && sim.playing) { sim.playing = false; syncButtons(); } break;
+  }
+}
+/* Move the clip forward in small steps so a long gap never skips a stop. */
+function advance(seconds) {
+  let left = seconds;
+  while (left > 0) { const dt = Math.min(left, 1 / 120); tick(dt); left -= dt; }
+}
+
+const ease = k => { const c = Math.min(1, Math.max(0, k)); return c * c * (3 - 2 * c); };
+const lerp = (a, b, k) => a + (b - a) * k;
+
+/* Where each sweeper stands, how far each sweeper bends, and where each brush is. */
+function sweepers() {
+  const wait = [{ x: START + 1.4, z: WAIT_SIDE }, { x: START + 2.4, z: WAIT_SIDE }];
+  return [0, 1].map(i => {
+    const s = Math.max(START, sim.stone.x);   // they stand at the start line until the stone gets there
+    const work = { x: s + FEET_AHEAD[i], z: SWEEP_SIDE };
+    if (sim.phase === 'ready') {
+      const k = ease(sim.t / (HOLD.ready - 0.3));
+      return { x: lerp(wait[i].x, work.x, k), z: lerp(wait[i].z, work.z, k), bend: ease((sim.t - 0.9) / 0.6),
+               brush: { x: s + BRUSH_AHEAD[i], z: 0 }, walking: k < 1, sweeping: false };
+    }
+    if (sim.phase === 'throw2') {
+      return { ...work, bend: 1, brush: { x: s + BRUSH_AHEAD[i], z: 0 }, walking: false, sweeping: false };
+    }
+    if (sim.phase === 'try2') {
+      const scrub = Math.sin(sim.clock * 2 * Math.PI * 3.2 + i * Math.PI) * 0.17;   // across the path, 3 times a second
+      return { ...work, bend: 1, brush: { x: s + BRUSH_AHEAD[i], z: scrub }, walking: true, sweeping: true };
+    }
+    if (sim.phase === 'why1') {          // brushes resting on the ice
+      return { ...work, bend: 1, brush: { x: s + BRUSH_AHEAD[i], z: 0 }, walking: false, sweeping: false };
+    }
+    if (sim.phase === 'why2') {          // rubbing the same spot, to show where the heat comes from
+      const scrub = Math.sin(sim.clock * 2 * Math.PI * 3.2 + i * Math.PI) * 0.17;
+      return { ...work, bend: 1, brush: { x: s + BRUSH_AHEAD[i], z: scrub }, walking: false, sweeping: true };
+    }
+    if (sim.phase === 'done') {
+      const k = ease(sim.t / 0.9);
+      // step back and to the side, clear of the stone and its Try 2 marker
+      return { x: work.x + 0.8 * k, z: lerp(SWEEP_SIDE, -1.1, k), bend: 1 - k, brush: { x: s + BRUSH_AHEAD[i], z: 0 },
+               walking: k < 1, sweeping: false };
+    }
+    return { ...wait[i], bend: 0, brush: null, walking: false, sweeping: false };
+  });
+}
+
+/* ── DRAWING ── */
+const SHARP = 2;                   // the picture is drawn at twice its size so a projector shows it sharp
+const cv = document.getElementById('stage');
+cv.width = W * SHARP; cv.height = H * SHARP;
+const ctx = cv.getContext('2d');
+ctx.scale(SHARP, SHARP);
+const px = x => X0 + x * SX, py = z => CY + z * SZ;
+
+function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+
+const backdrop = document.createElement('canvas');
+backdrop.width = W * SHARP; backdrop.height = H * SHARP;
+function paintBackdrop() {
+  const b = backdrop.getContext('2d');
+  b.setTransform(SHARP, 0, 0, SHARP, 0, 0);
+  b.clearRect(0, 0, W, H);
+  const wall = b.createLinearGradient(0, 0, 0, SHEET_TOP);
+  wall.addColorStop(0, '#0F2238'); wall.addColorStop(1, '#1B3A5C');
+  b.fillStyle = wall; b.fillRect(0, 0, W, SHEET_TOP);
+  b.fillStyle = '#E9EEF2'; b.fillRect(0, SHEET_TOP - 20, W, 20);          // the boards
+  b.fillStyle = '#1F5FBF'; b.fillRect(0, SHEET_TOP - 20, W, 4);
+
+  const ice = b.createLinearGradient(0, SHEET_TOP, 0, SHEET_BOTTOM);
+  ice.addColorStop(0, '#E3EFF7'); ice.addColorStop(1, '#F1F8FC');
+  b.fillStyle = ice; b.fillRect(0, SHEET_TOP, W, SHEET_BOTTOM - SHEET_TOP);
+  b.fillStyle = '#F5F8F7'; b.fillRect(0, SHEET_BOTTOM, W, H - SHEET_BOTTOM);
+  b.fillStyle = '#B9C9D6'; b.fillRect(0, SHEET_BOTTOM, W, 3);
+
+  const cx = px(TEE);                                                      // the target
+  for (const [r, color] of RINGS) {
+    b.beginPath(); b.ellipse(cx, CY, r * SX, r * SZ, 0, 0, Math.PI * 2); b.fillStyle = color; b.fill();
+  }
+  b.strokeStyle = 'rgba(40,70,100,.35)'; b.lineWidth = 2;                  // the path down the middle
+  b.beginPath(); b.moveTo(0, CY); b.lineTo(W, CY); b.stroke();
+  b.beginPath(); b.moveTo(cx, SHEET_TOP); b.lineTo(cx, SHEET_BOTTOM); b.stroke();
+  b.strokeStyle = '#D8352A'; b.lineWidth = 4;                              // the start line
+  b.beginPath(); b.moveTo(px(START), SHEET_TOP); b.lineTo(px(START), SHEET_BOTTOM); b.stroke();
+
+  const r = rng(7);                                                        // tiny bumps on ice nobody swept
+  b.fillStyle = 'rgba(95,140,175,.34)';
+  for (let i = 0; i < 1500; i++) {
+    b.beginPath(); b.arc(r() * W, SHEET_TOP + 4 + r() * (SHEET_BOTTOM - SHEET_TOP - 8), 1.5, 0, Math.PI * 2); b.fill();
+  }
+
+  b.fillStyle = '#16211F'; b.textAlign = 'center'; b.textBaseline = 'alphabetic';
+  b.font = '700 24px "Public Sans", -apple-system, sans-serif';
+  b.fillText('target', cx, SHEET_BOTTOM - 12);
+  b.fillText('start', px(START) + 42, SHEET_BOTTOM - 12);
+  b.font = '600 22px "Public Sans", -apple-system, sans-serif';            // meters from the start
+  b.strokeStyle = '#4A5C58'; b.lineWidth = 2;
+  for (let m = 0; START + m <= (W - X0 * 2) / SX; m++) {
+    const x = px(START + m), major = m % 2 === 0;
+    b.beginPath(); b.moveTo(x, SHEET_BOTTOM + 3); b.lineTo(x, SHEET_BOTTOM + (major ? 16 : 10)); b.stroke();
+    if (major) b.fillText(m + ' m', x, SHEET_BOTTOM + 40);
+  }
+}
+paintBackdrop();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paintBackdrop(); draw(); });   // the labels, once the font is in
+
+function drawStone(x) {
+  const sx = px(x);
+  ctx.fillStyle = 'rgba(20,40,60,.20)';
+  ctx.beginPath(); ctx.ellipse(sx + 4, CY + 8, 27, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#6F777D';                                               // the granite
+  ctx.beginPath(); ctx.ellipse(sx, CY + 3, 24, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(sx - 24, CY - 9, 48, 12);
+  ctx.fillStyle = '#C5CCD1'; ctx.fillRect(sx - 24, CY - 5, 48, 4);
+  ctx.fillStyle = '#9AA2A8';
+  ctx.beginPath(); ctx.ellipse(sx, CY - 9, 24, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#D8352A';                                               // the handle
+  ctx.fillRect(sx - 3, CY - 21, 6, 10);
+  ctx.beginPath(); ctx.roundRect(sx - 13, CY - 27, 24, 8, 4); ctx.fill();
+}
+
+function drawSweeper(p, look) {
+  const fx = px(p.x), fy = py(p.z), b = p.bend;
+  const hip = { x: fx - 0.05 * FS * b, y: fy - lerp(0.92, 0.72, b) * FS };
+  const a = b * 62 * Math.PI / 180;                                        // how far the sweeper leans forward
+  const sh = { x: hip.x + Math.sin(a) * 0.55 * FS, y: hip.y - Math.cos(a) * 0.55 * FS };
+  const head = { x: sh.x + Math.sin(a) * 0.19 * FS + 2, y: sh.y - Math.cos(a) * 0.19 * FS - 2 };
+
+  // the brush: held upright when waiting, pushed onto the path when sweeping
+  const up = { top: { x: fx + 0.34 * FS, y: fy - 1.3 * FS }, pad: { x: fx + 0.34 * FS, y: fy } };
+  let top = up.top, pad = up.pad;
+  if (p.brush) {
+    const target = { x: px(p.brush.x), y: py(p.brush.z) };
+    const len = Math.hypot(target.x - sh.x, target.y - sh.y) || 1;
+    const u = { x: (target.x - sh.x) / len, y: (target.y - sh.y) / len };
+    const down = { top: { x: sh.x + u.x * 0.26 * FS, y: sh.y + u.y * 0.26 * FS }, pad: target };
+    top = { x: lerp(up.top.x, down.top.x, b), y: lerp(up.top.y, down.top.y, b) };
+    pad = { x: lerp(up.pad.x, down.pad.x, b), y: lerp(up.pad.y, down.pad.y, b) };
+  }
+  const grip = k => ({ x: lerp(top.x, pad.x, k), y: lerp(top.y, pad.y, k) });
+
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.fillStyle = 'rgba(20,40,60,.16)';                                    // shadow on the ice
+  ctx.beginPath(); ctx.ellipse(fx + 4, fy + 2, 20, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+  const step = p.walking ? Math.sin(p.x * Math.PI / 0.45) * 0.16 * FS : 0.07 * FS;
+  ctx.strokeStyle = '#1C2733'; ctx.lineWidth = 0.13 * FS;                   // legs
+  for (const side of [1, -1]) {
+    const foot = { x: fx + side * step, y: fy - 3 };
+    const knee = { x: (hip.x + foot.x) / 2 + 0.09 * FS * b, y: (hip.y + foot.y) / 2 };
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(knee.x, knee.y); ctx.lineTo(foot.x, foot.y); ctx.stroke();
+  }
+  ctx.strokeStyle = look.jacket; ctx.lineWidth = 0.27 * FS;                 // body
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y - 2); ctx.lineTo(sh.x, sh.y); ctx.stroke();
+
+  ctx.strokeStyle = '#2B3640'; ctx.lineWidth = 4;                           // brush handle
+  ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(pad.x, pad.y); ctx.stroke();
+  ctx.fillStyle = '#FFC21A'; ctx.strokeStyle = '#8A5A00'; ctx.lineWidth = 2; // brush head, flat on the ice
+  ctx.beginPath(); ctx.roundRect(pad.x - 13, pad.y - 5, 26, 10, 4); ctx.fill(); ctx.stroke();
+
+  ctx.strokeStyle = look.sleeve; ctx.lineWidth = 0.11 * FS;                 // arms holding the brush
+  for (const k of [0.12, 0.34]) {
+    const g = grip(k);
+    ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(g.x, g.y); ctx.stroke();
+  }
+  ctx.fillStyle = look.skin;                                                // head
+  ctx.beginPath(); ctx.arc(head.x, head.y, 0.125 * FS, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = look.hair;
+  ctx.beginPath(); ctx.arc(head.x - 1, head.y - 2, 0.125 * FS, Math.PI * 1.05, Math.PI * 2.05); ctx.fill();
+}
+/* The thrower slides low on the ice with one hand on the stone's handle. */
+function throwerHand() {
+  if (sim.phase === 'throw1' || sim.phase === 'throw2') return sim.stone.x;
+  if (sim.phase === 'try1' || sim.phase === 'try2') return handAfterRelease(sim.t);
+  if (['rest1', 'fade', 'why1', 'why2', 'done'].includes(sim.phase)) return START + FOLLOW;
+  return HELD_AT;
+}
+function drawThrower(handX) {
+  const hx = px(handX), t = FS, at = (dx, up) => ({ x: hx + dx * t, y: CY - up * t });
+  const hand = { x: hx, y: CY - 23 }, sh = at(-0.58, 0.52), hip = at(-1.05, 0.42), head = at(-0.42, 0.72);
+  const line = (pts, color, width) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.slice(1).forEach(q => ctx.lineTo(q.x, q.y)); ctx.stroke();
+  };
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.fillStyle = 'rgba(20,40,60,.16)';
+  ctx.beginPath(); ctx.ellipse(hx - 1.0 * t, CY + 3, 0.85 * t, 7, 0, 0, Math.PI * 2); ctx.fill();
+  line([hip, at(-1.42, 0.12), at(-1.82, 0.05)], '#1C2733', 0.13 * t);        // back leg, stretched out behind
+  line([sh, at(-0.40, 0.14)], '#23804A', 0.11 * t);                          // the other arm, down by the ice
+  line([hip, at(-0.62, 0.38), at(-0.72, 0.04)], '#1C2733', 0.13 * t);        // front leg, foot under the chest
+  line([{ x: hip.x, y: hip.y - 2 }, sh], '#2E9D5B', 0.27 * t);               // body, leaning forward
+  line([sh, hand], '#23804A', 0.11 * t);                                     // the arm that holds the stone
+  ctx.fillStyle = '#8D5B3E'; ctx.beginPath(); ctx.arc(head.x, head.y, 0.125 * t, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1B1B1B'; ctx.beginPath(); ctx.arc(head.x - 1, head.y - 2, 0.125 * t, Math.PI * 1.05, Math.PI * 2.05); ctx.fill();
+}
+
+const LOOKS = [
+  { jacket: '#1E7FD6', sleeve: '#1668B3', skin: '#C98D62', hair: '#2A1B12' },
+  { jacket: '#F08C1A', sleeve: '#CC7410', skin: '#F0C8A0', hair: '#5A3A1E' }
+];
+
+/* How warm the freshly rubbed ice looks (0 = not shown). */
+function warmth() {
+  if (sim.phase === 'try2') return 0.5;
+  if (sim.phase === 'why1') return 0.3;
+  if (sim.phase === 'why2') return 0.46 + 0.14 * Math.sin(sim.clock * 6);
+  if (sim.phase === 'done') return Math.max(0, 0.3 * (1 - sim.t / 1.0));
+  return 0;
+}
+/* Three wavy lines of heat rising from a point. */
+function drawHeat(x, y, size) {
+  ctx.strokeStyle = '#E8590C'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  const drift = (sim.clock * 26) % 12;
+  for (const dx of [-size, 0, size]) {
+    ctx.beginPath();
+    for (let k = 0; k <= 18; k++) {
+      const yy = y - drift - k * 1.4, xx = x + dx + Math.sin((k + sim.clock * 9) / 2.6) * 3.5;
+      if (k === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+  }
+}
+/* Two hands rubbing together: the thing every student can try in their seat. */
+function drawHands() {
+  const cx = px(START + 5.3), cy = 112, slide = Math.sin(sim.clock * 9) * 17;
+  ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#B9C9D6'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(cx - 160, cy - 84, 320, 150, 16); ctx.fill(); ctx.stroke();
+  // one flat hand seen from the side: sleeve, palm, four fingers, thumb. dir = which way the fingers point
+  const hand = (x, y, skin, line, sleeve, dir, thumbUp) => {
+    ctx.fillStyle = sleeve; ctx.beginPath(); ctx.roundRect(x - dir * 96 - 27, y - 19, 54, 38, 9); ctx.fill();
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.roundRect(x - dir * 34 - 36, y - 15, 72, 30, 13); ctx.fill();          // palm
+    ctx.beginPath(); ctx.roundRect(Math.min(x, x + dir * 62), y - 14, 62, 28, 12); ctx.fill();   // fingers
+    ctx.beginPath(); ctx.ellipse(x - dir * 22, y + (thumbUp ? -17 : 17), 19, 9, dir * (thumbUp ? -0.35 : 0.35), 0, Math.PI * 2); ctx.fill();   // thumb
+    ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    for (const off of [-5, 2, 9]) {                                                              // the lines between the fingers
+      ctx.beginPath(); ctx.moveTo(x + dir * 12, y + off); ctx.lineTo(x + dir * 56, y + off); ctx.stroke();
+    }
+  };
+  hand(cx - 10 + slide, cy + 2, '#C98D62', '#9C6A45', '#1E7FD6', 1, true);    // one hand slides one way
+  hand(cx + 10 - slide, cy + 30, '#F0C8A0', '#C99B72', '#F08C1A', -1, false); // the other slides back
+  drawHeat(cx, cy - 26, 30);
+}
+
+function drawFlag(x, text, color) {
+  const sx = px(x);
+  ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.setLineDash([7, 6]);
+  ctx.beginPath(); ctx.moveTo(sx, 52); ctx.lineTo(sx, CY - 30); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(sx - 66, 10, 132, 42, 9); ctx.fill();
+  ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '700 22px "Public Sans", -apple-system, sans-serif';
+  ctx.fillText(text, sx, 32);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(backdrop, 0, 0, W, H);
+
+  if (sim.sweptTo) {                                                        // the strip the brushes made smooth
+    const x1 = px(START + BRUSH_AHEAD[0]) - 13, x2 = px(sim.sweptTo) + 13;
+    ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = 'rgba(70,130,180,.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(x1, CY - 19, x2 - x1, 38, 12); ctx.fill(); ctx.stroke();
+    const warm = warmth();                                                  // rubbed ice is a little warmer
+    if (warm > 0) {
+      const far = px(sim.stone.x + BRUSH_AHEAD[1]) + 13, near = Math.max(x1, px(sim.stone.x - 1.0));
+      const g = ctx.createLinearGradient(near, 0, far, 0);
+      g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, `rgba(255,140,40,${warm})`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(near, CY - 18, far - near, 36, 10); ctx.fill();
+    }
+    if (sim.sweptTo - START > 4) {
+      ctx.fillStyle = '#16211F'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '700 24px "Public Sans", -apple-system, sans-serif';
+      ctx.fillText('swept ice', x1 + 10, CY + 48);
+    }
+  }
+  if (sim.try1Stop) drawFlag(sim.try1Stop, `Try 1: ${Math.round(sim.try1Stop - START)} m`, '#5B6770');
+  if (sim.try2Stop) drawFlag(sim.try2Stop, `Try 2: ${Math.round(sim.try2Stop - START)} m`, '#1E63C4');
+
+  const people = sweepers();
+  people.forEach((p, i) => drawSweeper(p, LOOKS[i]));   // they stay on the far side, so the stone is never hidden
+  drawThrower(throwerHand());
+  drawStone(sim.stone.x);
+  if (sim.phase === 'try2' || sim.phase === 'why2') {                       // heat coming off the rubbed ice
+    people.forEach(p => drawHeat(px(p.brush.x), CY - 12, 0));
+  }
+  if (sim.phase === 'why1') drawHands();
+  if (sim.phase === 'why2') {                                               // name the warm strip
+    const lx = px(sim.stone.x + BRUSH_AHEAD[0]), ly = CY + 46;
+    ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#E8590C'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(lx - 78, ly - 20, 156, 40, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#9A3A00'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 23px "Public Sans", -apple-system, sans-serif';
+    ctx.fillText('warmer ice', lx, ly + 1);
+  }
+
+  // a short fade between Try 1 and Try 2, while the stone goes back to the thrower
+  const FADE = HOLD.fade;
+  let veil = 0;
+  if (sim.phase === 'fade') veil = sim.t / FADE;
+  if (sim.phase === 'ready') veil = 1 - sim.t / FADE;
+  if (veil > 0) { ctx.fillStyle = `rgba(245,248,247,${Math.min(1, veil)})`; ctx.fillRect(0, 0, W, H); }
+}
+
+/* ── WORDS, VOICE AND BUTTONS ── */
+const capEl = document.getElementById('cap');
+const playBtn = document.getElementById('play');
+const sayBtn = document.getElementById('say');
+const voiceBtn = document.getElementById('voice');
+
+/* The voice that reads each sentence. No voice is named: each device uses its own.
+   `busy` is true while a sentence is being read, so the story can wait for it. */
+const narrator = {
+  on: true, busy: false, current: null, timers: [],
+  say(text) {
+    this.stop();
+    if (!this.on || !window.speechSynthesis || !text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 0.82;
+    let started = false;
+    const finish = () => { if (this.current === u) { this.current = null; this.busy = false; this.clearTimers(); sayBtn.textContent = '🔊'; } };
+    u.onstart = () => { started = true; };
+    u.onend = finish; u.onerror = finish;
+    this.current = u; this.busy = true; sayBtn.textContent = '⏹';
+    const words = text.trim().split(/\s+/).length;
+    this.timers = [
+      setTimeout(() => { if (!started) finish(); }, 1500),          // this device has no voice: do not wait
+      setTimeout(finish, (words * 0.55 + 2.5) * 1000)               // the device never said it finished
+    ];
+    window.speechSynthesis.speak(u);
+  },
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; },
+  stop() {
+    this.current = null; this.busy = false; this.clearTimers(); sayBtn.textContent = '🔊';
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+  }
+};
+
+/* New words on the screen are read aloud once, as soon as they appear (after Play was pressed). */
+function setCaption(text) {
+  if (capEl.textContent === text) return;
+  capEl.textContent = text;
+  if (sim.phase !== 'idle') narrator.say(text); else narrator.stop();
+}
+function syncButtons() {
+  playBtn.textContent = sim.playing ? '⏸ Pause' : (sim.phase === 'done' ? '▶ Play again' : '▶ Play');
+  voiceBtn.textContent = narrator.on ? '🔊 Voice on' : '🔇 Voice off';
+  voiceBtn.setAttribute('aria-pressed', String(narrator.on));
+}
+function reset() {
+  narrator.stop();
+  Object.assign(sim, { phase: 'idle', t: 0, playing: false, stone: HELD(),
+                       try1Stop: null, try2Stop: null, sweptTo: null });
+  capEl.textContent = '';
+  setCaption(CAPTIONS.idle); syncButtons(); draw();
+}
+playBtn.addEventListener('click', () => {
+  if (sim.phase === 'done') reset();
+  const starting = sim.phase === 'idle';
+  if (starting) go('intro');                       // the first sentence is read here, inside the tap
+  sim.playing = !sim.playing;
+  if (!sim.playing) narrator.stop();               // Pause also stops the voice
+  else if (!starting) narrator.say(capEl.textContent);   // Play after a pause reads the sentence again
+  syncButtons();
+});
+document.getElementById('again').addEventListener('click', reset);
+voiceBtn.addEventListener('click', () => {
+  narrator.on = !narrator.on;
+  if (!narrator.on) narrator.stop();
+  syncButtons();
+});
+/* The speaker by the words: read this sentence again, or stop the voice. */
+sayBtn.addEventListener('click', () => {
+  if (narrator.busy) { narrator.stop(); return; }
+  const was = narrator.on; narrator.on = true; narrator.say(capEl.textContent); narrator.on = was;
+});
+
+window.addEventListener('pagehide', () => narrator.stop());   // closing the clip stops the voice
+
+let last = null;
+function frame(now) {
+  if (last !== null && sim.playing) advance(Math.min(0.1, (now - last) / 1000));
+  last = now;
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* For checking the clip by script: step it and read where everything is. */
+window.__curling = {
+  advance(seconds) { advance(seconds); draw(); },
+  setVoice(on) { narrator.on = !!on; if (!on) narrator.stop(); syncButtons(); },
+  voiceBusy() { return narrator.busy; },
+  play() { playBtn.click(); },
+  facts: { START, TEE, HOUSE_RADIUS: RINGS[0][0], STONE_DRAWN_RADIUS, MU_PLAIN, MU_SWEPT, V0, HELD_AT, PLAYBACK },
+  state() {
+    const people = sweepers();
+    return { phase: sim.phase, playing: sim.playing, stoneX: sim.stone.x, stoneSpeed: sim.stone.v, handX: throwerHand(),
+             try1Stop: sim.try1Stop, try2Stop: sim.try2Stop, sweptTo: sim.sweptTo,
+             sweepers: people.map(p => ({ feetX: p.x, feetZ: p.z, sweeping: p.sweeping,
+                                          brushX: p.brush ? p.brush.x : null, brushZ: p.brush ? p.brush.z : null })) };
+  }
+};
+
+reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -64,6 +64,10 @@ button{font:inherit; cursor:pointer;}
 #stage{position:fixed; inset:0; background:#000; display:none; z-index:60;}
 #stage.on{display:block;}
 #stage iframe{position:absolute; inset:0; width:100%; height:100%; border:0;}
+/* A clip made for the lesson is one of our own pages: it has its own Play
+   button and nothing to guard against, so the two strips come off. */
+#stage.own{background:#F5F8F7;}
+#stage.own .shield{display:none;}
 /* YouTube keeps its own buttons on the player: the channel link along the top,
    and "More videos" / "Watch on YouTube" along the bottom. No URL parameter
    removes them. These two strips swallow the clicks so neither can be reached;
@@ -95,19 +99,19 @@ button{font:inherit; cursor:pointer;}
       <h1>Lesson clips</h1>
     </div>
   </div>
-  <p class="lead">Each one opens to the video filling the screen &mdash; no sidebar, no comments,
+  <p class="lead">Each one opens to the clip filling the screen &mdash; no sidebar, no comments,
   no suggested videos. Press <b>Close</b> or <b>Esc</b> to come back.</p>
 
   <div id="list"></div>
 
   <div class="note">
-    <b>Nothing on the player can be tapped.</b> YouTube puts its own buttons along the top and
+    <b>Nothing on the YouTube player can be tapped.</b> YouTube puts its own buttons along the top and
     bottom of the picture &mdash; a channel link, &ldquo;More videos&rdquo;, &ldquo;Watch on
     YouTube&rdquo;. Those strips are covered here, so a stray tap cannot leave the clip. Tap the
     middle to pause or play, <b>Full screen</b> to fill the projector. <b>Close</b> or <b>Esc</b> ends it.
   </div>
 
-  <p class="foot">Nothing here is stored or sent. Clips are linked, not copied.</p>
+  <p class="foot">Nothing here is stored or sent. The filmed clip is linked, not copied. The drawn clip was made for this lesson.</p>
 </div>
 
 <div id="stage">
@@ -129,7 +133,16 @@ const CLIPS = [
     title: 'Why do curlers sweep the ice?',
     meta: 'PennLive.com · 0:31 of footage',
     when: 'End of Day 1',
-    say: 'Read the caption aloud at 0:21 — do not make them read it.' }
+    say: 'Read the caption aloud at 0:21 — do not make them read it.' },
+  /* Drawn for this lesson (2026-10-11), not filmed: the same push two times —
+     nobody sweeps, then two sweepers rub the ice in front of the stone — and
+     then why (rubbing makes heat, warmer ice is more slippery). It reads its
+     own words aloud once Play is pressed. `page` = one of our own pages. */
+  { page: 'curling-sweeping.html',
+    title: 'Two tries: no sweeping, then sweeping',
+    meta: 'Drawn for this lesson · about 1 minute',
+    when: 'End of Day 1',
+    say: 'Show after the filmed clip. Press Play — the clip reads itself aloud.' }
 ];
 
 const list = document.getElementById('list');
@@ -155,10 +168,15 @@ function open(c) {
   /* youtube-nocookie + rel=0 keeps the page to the player alone. The iframe is
      built fresh each time and torn down on close, so nothing keeps playing. */
   const f = document.createElement('iframe');
-  f.src = 'https://www.youtube-nocookie.com/embed/' + c.id +
-          '?rel=0&modestbranding=1&playsinline=1&autoplay=1';
   f.title = c.title;
-  f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+  if (c.page) {
+    f.src = c.page;                 /* our own page: nothing starts until Play is pressed on it */
+  } else {
+    f.src = 'https://www.youtube-nocookie.com/embed/' + c.id +
+            '?rel=0&modestbranding=1&playsinline=1&autoplay=1';
+    f.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+  }
+  stage.classList.toggle('own', !!c.page);
   f.setAttribute('allowfullscreen', '');
   frame.innerHTML = '';
   frame.appendChild(f);
@@ -168,6 +186,10 @@ function open(c) {
 
 function close() {
   stage.classList.remove('on');
+  /* a drawn clip may be reading aloud: stop its voice before the page goes */
+  const f = frame.querySelector('iframe');
+  try { if (f && f.contentWindow && f.contentWindow.speechSynthesis) f.contentWindow.speechSynthesis.cancel(); } catch (e) {}
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   frame.innerHTML = '';          /* stops playback dead */
 }
 document.getElementById('close').onclick = close;
